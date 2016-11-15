@@ -15,11 +15,15 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
+#include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+static struct semaphore sema_main;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -61,6 +65,8 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  sema_up(&sema_main);
+  
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
@@ -88,6 +94,13 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  if(child_tid != -1)
+  {
+    sema_init(&sema_main, 0);
+
+    sema_down(&sema_main);
+  }
+
   return -1;
 }
 
@@ -214,12 +227,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+  char c[2], *f_name;
+  c[0]=' ';
+  c[1]=0;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+
+  i=strcspn (file_name, c);
+  f_name=calloc(1,i+1);
+  file_name=memcpy(f_name, file_name, i);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -313,6 +333,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  free(f_name);
   return success;
 }
 
