@@ -21,7 +21,7 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (char *cmdline, void (**eip) (void), void **esp);
 
 static struct semaphore sema_main;
 
@@ -219,27 +219,41 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (char *file_name, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
-  int i;
-  char c[2], *f_name;
-  c[0]=' ';
-  c[1]=0;
+  int i=0, argc=0;
+  char **mass, *f_name=NULL;
+
+  char *token, *save_ptr;
+
+  printf("Here\n");
+
+  for (token = file_name; token != NULL; i++)
+  {
+    token+=1;
+    token=strchr (token, ' ');
+  }
+   
+  argc=i; 
+  mass=calloc(sizeof(int)*(i+1), 1);
+
+  i=0;
+
+  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr), ++i)
+    mass[i]=token;
+
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
-
-  i=strcspn (file_name, c);
-  f_name=calloc(1,i+1);
-  file_name=memcpy(f_name, file_name, i);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -329,6 +343,22 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
+
+
+  *esp -= 8;
+  token=*esp;
+  memcpy (token, &argc, 4);
+
+  *esp -= 4;
+  token=*esp;
+  memcpy (token, &mass, 4);  
+
+  for (i = 0; i < argc; ++i)
+  {
+    *esp -= 4;
+    token=*esp;
+    memcpy (token, &mass[i], 4);
+  }
 
  done:
   /* We arrive here whether the load is successful or not. */
