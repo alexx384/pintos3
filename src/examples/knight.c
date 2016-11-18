@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <malloc.h>
 
 int dx[8] = { -2, -1, 1, 2, 2, 1, -1, -2 };
 int dy[8] = { 1, 2, 2, 1, -1, -2, -2, -1 };
@@ -92,4 +93,6 @@ void main(int argc, char *argv[]) {
   printf("\n");
   show_desk();
   printf("\n");
+
+  return 0;
 }

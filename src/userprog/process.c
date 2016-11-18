@@ -67,7 +67,7 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  sema_up(&sema_main);
+  //sema_up(&sema_main);
   
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -119,6 +119,8 @@ process_exit (void)
     *c=0;
 
   printf("%s: exit(%d)\n", cur->name, exit_status);
+
+  sema_up(&sema_main);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
