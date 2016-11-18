@@ -226,12 +226,10 @@ load (char *file_name, void (**eip) (void), void **esp)
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
+
   int i=0, argc=0;
-  char **mass, *f_name=NULL;
+  char **mass, *token, *save_ptr;
 
-  char *token, *save_ptr;
-
-  printf("Here\n");
 
   for (token = file_name; token != NULL; i++)
   {
@@ -344,26 +342,55 @@ load (char *file_name, void (**eip) (void), void **esp)
 
   success = true;
 
+/* Add characters in stack */  
 
-  *esp -= 8;
-  token=*esp;
-  memcpy (token, &argc, 4);
+  for(i=argc-1; i  > -1; --i)
+  {
+    *esp -=strlen(mass[i])+1;
+    token=*esp;
+    save_ptr=token;
 
-  *esp -= 4;
-  token=*esp;
-  memcpy (token, &mass, 4);  
+    memcpy (token, mass[i], strlen(mass[i])+1);
+    mass[i]=save_ptr;
+  }
 
-  for (i = 0; i < argc; ++i)
+/* Add word-align in stack. I don't know why, but official site say, 
+   that Pintos works faster */
+  *esp -= 1;
+
+/* Add pointer to characters in stack */  
+  for (i = argc; i > -1; --i)
   {
     *esp -= 4;
     token=*esp;
+    
     memcpy (token, &mass[i], 4);
   }
+
+/* Free our first array, that we were created before */
+  free(mass);
+
+/* Like mass=token;*/
+  save_ptr=token;
+
+/* Add pointer to pointers to characters in stack */
+  *esp -= 4;
+  token=*esp;
+  memcpy (token, &save_ptr, 4);  
+
+/* Add count of arguments in stack */
+  *esp -= 4;
+  token=*esp;
+  memcpy (token, &argc, 4);
+
+/* Add return address in stack */
+  *esp -= 4;
+
+//hex_dump( *esp, *esp, PHYS_BASE - *esp, true );
 
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
-  free(f_name);
   return success;
 }
 
