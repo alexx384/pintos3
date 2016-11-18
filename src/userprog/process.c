@@ -25,6 +25,8 @@ static bool load (char *cmdline, void (**eip) (void), void **esp);
 
 static struct semaphore sema_main;
 
+static int exit_status;
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -110,6 +112,13 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  char *c=cur->name;
+  c=strchr (c, ' ');
+  if(c != NULL)
+    *c=0;
+
+  printf("%s: exit(%d)\n", cur->name, exit_status);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -234,6 +243,7 @@ load (char *file_name, void (**eip) (void), void **esp)
   for (token = file_name; token != NULL; i++)
   {
     token+=1;
+    if(*token == ' ') i--;
     token=strchr (token, ' ');
   }
    
@@ -540,4 +550,9 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+void set_exit_status(int i)
+{
+  exit_status=i;
 }
