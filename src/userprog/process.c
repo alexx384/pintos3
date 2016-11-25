@@ -24,6 +24,7 @@ static thread_func start_process NO_RETURN;
 static bool load (char *cmdline, void (**eip) (void), void **esp);
 
 static struct semaphore sema_main;
+static struct semaphore sema_user;
 
 static int exit_status;
 
@@ -96,12 +97,21 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  if(child_tid != -1)
+  if(thread_current()->tid == 1)
   {
     sema_init(&sema_main, 0);
 
     sema_down(&sema_main);
+    return 0;
+  }else if (child_tid != -1)
+  {
+    sema_init(&sema_user, 0);
+
+    sema_down(&sema_user);
+    return 0;
   }
+
+  return -1;
 
   return -1;
 }
@@ -120,7 +130,10 @@ process_exit (void)
 
   printf("%s: exit(%d)\n", cur->name, exit_status);
 
-  sema_up(&sema_main);
+  if(cur->tid == 3)
+      sema_up(&sema_main);
+  else
+      sema_up(&sema_user);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
