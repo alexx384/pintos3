@@ -25,8 +25,9 @@ static bool load (char *cmdline, void (**eip) (void), void **esp);
 
 static struct semaphore sema_main;
 static struct semaphore sema_user;
+struct semaphore sema_return_code;
 
-static int exit_status;
+static int exit_status=0;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -38,6 +39,9 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
+  memset(&sema_return_code, 0, sizeof(struct semaphore));
+  sema_init(&sema_return_code, 0);
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -47,8 +51,15 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+  else{
+    exit_status=tid;
+    sema_down(&sema_return_code);
+    tid=exit_status;
+  }
+
   return tid;
 }
 
@@ -68,13 +79,17 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  //sema_up(&sema_main);
+  if (!success)
+    exit_status=-1;
+  
+  sema_up(&sema_return_code);
   
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
+  thread_yield();
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -97,21 +112,20 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  if(thread_current()->tid == 1)
+  if(thread_current()->tid == 1 && child_tid != -1)
   {
     sema_init(&sema_main, 0);
 
     sema_down(&sema_main);
-    return 0;
-  }else if (child_tid != -1)
+    return exit_status;
+  }
+  if(thread_current()->tid != 1 && child_tid != -1)
   {
     sema_init(&sema_user, 0);
 
     sema_down(&sema_user);
-    return 0;
+    return exit_status;
   }
-
-  return -1;
 
   return -1;
 }
@@ -122,6 +136,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  int i=1;
 
   char *c=cur->name;
   c=strchr (c, ' ');
@@ -130,10 +145,19 @@ process_exit (void)
 
   printf("%s: exit(%d)\n", cur->name, exit_status);
 
-  if(cur->tid == 3)
+  if(exit_status != -1)
+  {
+    if(cur->tid == 3)
+        sema_up(&sema_main);
+    else
+        sema_up(&sema_user);
+  }else{
+    if (!list_empty (&sema_main.waiters) && i)
+    {
       sema_up(&sema_main);
-  else
-      sema_up(&sema_user);
+      i--;  
+    }
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
