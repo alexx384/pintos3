@@ -4,6 +4,7 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "userprog/syscall.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -127,6 +128,7 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
+
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -148,11 +150,14 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+
   if (!user)
   {
-    f->eip=f->eax;
-    f->eax=0xffffffff;
-  }
+    exit(-1);
+    //f->eip=f->eax;
+    //f->eax=0xffffffff;
+
+  }else{printf("Access by kernel");}
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

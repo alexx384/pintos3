@@ -98,6 +98,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  sema_init(&(initial_thread->sema_holder), 0);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -203,6 +204,13 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+
+  #ifdef USERPROG
+
+  t->child_thread_list.count=0;
+  t->holder=thread_current();
+  sema_init(&(t->sema_holder), 0);  
+  #endif
 
   intr_set_level (old_level);
 

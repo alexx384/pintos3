@@ -23,8 +23,6 @@
 static thread_func start_process NO_RETURN;
 static bool load (char *cmdline, void (**eip) (void), void **esp);
 
-static struct semaphore sema_main;
-static struct semaphore sema_user;
 struct semaphore sema_return_code;
 
 static int exit_status=0;
@@ -38,6 +36,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+  struct thread *cur=thread_current();
 
   memset(&sema_return_code, 0, sizeof(struct semaphore));
   sema_init(&sema_return_code, 0);
@@ -51,10 +50,11 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-
+  
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   else{
+
     exit_status=tid;
     sema_down(&sema_return_code);
     tid=exit_status;
@@ -78,6 +78,7 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+  
 
   if (!success)
     exit_status=-1;
@@ -90,6 +91,7 @@ start_process (void *file_name_)
     thread_exit ();
 
   thread_yield();
+
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -112,18 +114,12 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  if(thread_current()->tid == 1 && child_tid != -1)
-  {
-    sema_init(&sema_main, 0);
+  struct thread *cur=thread_current();
 
-    sema_down(&sema_main);
-    return exit_status;
-  }
-  if(thread_current()->tid != 1 && child_tid != -1)
+  if(child_tid != -1)
   {
-    sema_init(&sema_user, 0);
-
-    sema_down(&sema_user);
+    cur->sema_holder.value=0;
+    sema_down(&(cur->sema_holder));
     return exit_status;
   }
 
@@ -145,19 +141,10 @@ process_exit (void)
 
   printf("%s: exit(%d)\n", cur->name, exit_status);
 
-  if(exit_status != -1)
-  {
-    if(cur->tid == 3)
-        sema_up(&sema_main);
-    else
-        sema_up(&sema_user);
-  }else{
-    if (!list_empty (&sema_main.waiters) && i)
-    {
-      sema_up(&sema_main);
-      i--;  
-    }
-  }
+  //if(exit_status != -1)
+  //{
+    sema_up(&(cur->holder->sema_holder));
+  //}
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

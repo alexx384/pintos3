@@ -6,26 +6,17 @@
 #include "threads/vaddr.h"
 #include "threads/init.h"
 #include "threads/synch.h"
-#include "userprog/process.h"
+#include "threads/malloc.h"
+#include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
 static void get_user (const uint8_t *uaddr);
-static bool put_user (uint8_t *udst, uint8_t byte);
+static void put_user (uint8_t *udst, uint8_t byte);
 static void exec_once(void);
-static void add_to_list(int pid);
-static void if_elem_in_list(int pid);
-static void exit(int value);
+static void validate_user_pointer(const void *esp);
 
 static struct semaphore sema_for_execute={0};
 static int once=1;
-
-struct pid_list
-{
-	int *list;
-	int count;
-};
-
-static struct pid_list list_for_pid;
 
 void
 syscall_init (void) 
@@ -39,6 +30,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 	int sys_num = *(int*) f->esp;
 	int *args = (int*) f->esp + 1;
 	int return_address;
+
 
 	validate_user_pointer((const void*) f->esp);
 
@@ -61,8 +53,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 			sema_down(&sema_for_execute);
 
 			validate_user_pointer((const void*) args[0]);
-			get_user(args[0]);
-			return_address=process_execute(args[0]);
+			get_user((const uint8_t*) args[0]);
+			return_address=process_execute((const char*) args[0]);
 			f->eax=return_address;
 
 			sema_up(&sema_for_execute);
@@ -70,11 +62,15 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}break;
 		case SYS_WAIT:
 		{
-			if_elem_in_list(args[0]);
-			return_address=process_wait(args[0]);
-			f->eax=return_address;
-			add_to_list(args[0]);
-			return return_address;
+			if(!if_elem_in_list(args[0]))
+			{
+				return_address=process_wait(args[0]);
+				f->eax=return_address;
+				
+				add_to_list(args[0]);
+			}else f->eax=-1;
+
+			return;
 		}break;
 		case SYS_WRITE:
 		{
@@ -86,9 +82,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 	printf ("system call!\n");
 	thread_exit ();
 }
-
-void validate_user_pointer(const void *esp)
+static void 
+validate_user_pointer(const void *esp)
 {
+	//printf("Up %p\n", pg_round_up(esp));
+	//printf("%p\n", esp);
+	//printf("Down %p\n", pg_round_down(esp));
 	if (!is_user_vaddr (esp))
 	{
 		printf("Error unknown stack addres!\n");
@@ -106,59 +105,56 @@ get_user (const uint8_t *uaddr)
   int result;
   asm ("movl $1f, %0; movzbl %1, %0; 1:"
        : "=&a" (result) : "m" (*uaddr));
-
-  if(result == -1)
-  {
-  	exit(-1);
-  }
-  return result;
 }
 
 /* Writes BYTE to user address UDST.
    UDST must be below PHYS_BASE.
    Returns true if successful, false if a segfault occurred. */
-static bool
+static void
 put_user (uint8_t *udst, uint8_t byte)
 {
   int error_code;
   asm ("movl $1f, %0; movb %b2, %1; 1:"
        : "=&a" (error_code), "=m" (*udst) : "q" (byte));
-  return error_code != -1;
 }
 
 static void 
 exec_once()
 {
 	sema_init(&sema_for_execute, 1);
-	list_for_pid.count=1;
 }
 
-static void 
+void 
 add_to_list(int pid)
 {
-	if(list_for_pid.count == 1)
+	struct pid_list *list_for_pid = &(thread_current()->child_thread_list);
+
+	if(list_for_pid->count == 0)
 	{
-		list_for_pid.list=malloc(sizeof(int));
-		list_for_pid.list[0]=pid;
+		list_for_pid->list=malloc(sizeof(int));
+		list_for_pid->list[0]=pid;
 	}else{
-		list_for_pid.list=realloc(list_for_pid.list, sizeof(int)*list_for_pid.count);
-		list_for_pid.list[list_for_pid.count]=pid;
+		list_for_pid->list=realloc(list_for_pid->list, sizeof(int)*list_for_pid->count);
+		list_for_pid->list[list_for_pid->count]=pid;
 	}
-	++list_for_pid.count;
+	++(list_for_pid->count);
 }
 
-static void 
+bool 
 if_elem_in_list(int pid)
 {
 	int i;
-	for(i=0; i < (list_for_pid.count+1); ++i)
+	struct pid_list *list_for_pid = &(thread_current()->child_thread_list);
+
+	for(i=0; i < list_for_pid->count; ++i)
 	{
-		if(list_for_pid.list[i] == pid)
-			exit(-1);
+		if(list_for_pid->list[i] == pid)
+			return 1;
 	}
+	return 0;
 }
 
-static void 
+void 
 exit(int value)
 {
 	set_exit_status(value);			
