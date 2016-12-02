@@ -85,6 +85,7 @@ typedef int tid_t;
 struct pid_list
 {
   int *list;
+  int *value;
   int count;
 };
 

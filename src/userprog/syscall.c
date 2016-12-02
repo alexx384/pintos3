@@ -56,13 +56,14 @@ syscall_handler (struct intr_frame *f UNUSED)
 			get_user((const uint8_t*) args[0]);
 			return_address=process_execute((const char*) args[0]);
 			f->eax=return_address;
+			add_to_list(return_address);
 
 			sema_up(&sema_for_execute);
 			return;	
 		}break;
 		case SYS_WAIT:
 		{
-			if(!if_elem_in_list(args[0]))
+			if(if_elem_in_list(args[0]) >= 1)
 			{
 				return_address=process_wait(args[0]);
 				f->eax=return_address;
@@ -85,9 +86,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 static void 
 validate_user_pointer(const void *esp)
 {
-	//printf("Up %p\n", pg_round_up(esp));
-	//printf("%p\n", esp);
-	//printf("Down %p\n", pg_round_down(esp));
 	if (!is_user_vaddr (esp))
 	{
 		printf("Error unknown stack addres!\n");
@@ -128,19 +126,36 @@ void
 add_to_list(int pid)
 {
 	struct pid_list *list_for_pid = &(thread_current()->child_thread_list);
+	int in_list;
 
-	if(list_for_pid->count == 0)
+	if (list_for_pid->count == 0)
 	{
 		list_for_pid->list=malloc(sizeof(int));
+		list_for_pid->value=malloc(sizeof(int));
 		list_for_pid->list[0]=pid;
+		list_for_pid->value[0]=0;
 	}else{
-		list_for_pid->list=realloc(list_for_pid->list, sizeof(int)*list_for_pid->count);
-		list_for_pid->list[list_for_pid->count]=pid;
+		in_list=if_elem_in_list(pid);
+
+		if (in_list == 0)
+		{
+			list_for_pid->list=realloc(list_for_pid->list, sizeof(int)*(list_for_pid->count));
+			list_for_pid->value=realloc(list_for_pid->value, sizeof(int)*(list_for_pid->count));
+			list_for_pid->list[list_for_pid->count]=pid;
+			list_for_pid->value[list_for_pid->count]=0;
+		}
+		if (in_list >= 1)
+		{
+			++(list_for_pid->value[in_list-1]);
+		 	return;
+		}
+		if (in_list == -1)	return;	
+		
 	}
 	++(list_for_pid->count);
 }
 
-bool 
+int 
 if_elem_in_list(int pid)
 {
 	int i;
@@ -149,7 +164,10 @@ if_elem_in_list(int pid)
 	for(i=0; i < list_for_pid->count; ++i)
 	{
 		if(list_for_pid->list[i] == pid)
-			return 1;
+			if(list_for_pid->value[i] == 0)
+				return i+1;
+			else
+				return -1;
 	}
 	return 0;
 }
