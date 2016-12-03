@@ -209,7 +209,10 @@ thread_create (const char *name, int priority,
 
   t->child_thread_list.count=0;
   t->holder=thread_current();
-  sema_init(&(t->sema_holder), 0);  
+  sema_init(&(t->sema_holder), 0);
+
+  t->count_open_file = 2;
+  t->files = NULL;
   #endif
 
   intr_set_level (old_level);

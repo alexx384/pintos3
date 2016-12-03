@@ -3,8 +3,10 @@
 
 #include "userprog/process.h"
 
+/* Work with threads */
 void add_to_list(int pid);
 int if_elem_in_list(int pid);
+/* Exit */
 void exit(int value);
 
 void syscall_init (void);

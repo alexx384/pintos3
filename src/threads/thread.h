@@ -82,6 +82,13 @@ typedef int tid_t;
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
 
+struct open_file
+{
+  int fd;
+  struct file *file;
+  struct open_file *next, *before;  
+};
+
 struct pid_list
 {
   int *list;
@@ -108,6 +115,8 @@ struct thread
     struct pid_list child_thread_list;
     struct thread *holder;
     struct semaphore sema_holder;
+    struct open_file *files;
+    int count_open_file;
 #endif
 
     /* Owned by thread.c. */
