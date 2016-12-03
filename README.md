@@ -45,3 +45,10 @@ pass tests/userprog/read-bad-ptr
 pass tests/userprog/read-boundary
 pass tests/userprog/read-stdout
 pass tests/userprog/read-bad-fd
+-----
+pass tests/userprog/write-normal
+pass tests/userprog/write-zero
+pass tests/userprog/write-bad-ptr
+pass tests/userprog/write-boundary
+pass tests/userprog/write-stdin
+pass tests/userprog/write-bad-fd
