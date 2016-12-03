@@ -14,7 +14,6 @@
 
 static void syscall_handler (struct intr_frame *);
 static void get_user (const uint8_t *uaddr);
-static void put_user (uint8_t *udst, uint8_t byte);
 static void exec_once(void);
 static void validate_user_pointer(const void *esp);
 /* Work with filesys */
@@ -45,7 +44,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 	if(once)
 		exec_once();
 
-	//printf("sys_num = %d\n",sys_num);
 	switch (sys_num)
 	{
 		case SYS_HALT:
@@ -136,7 +134,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 			if (opened != NULL)
 			{
-				f->eax = file_read(opened, args[1], args[2]);	
+				f->eax = file_read(opened, (void*) args[1], args[2]);	
 			}else 	f->eax=-1;
 			return;
 		}break;
@@ -152,7 +150,24 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}break;
 		case SYS_WRITE:
 		{
-			putbuf( ((const char**) f->esp)[2], ((size_t*) f->esp)[3]);
+			if ((int*) args[0] == NULL)	exit(-1);
+
+			if (args[0] == 1)
+			{
+				putbuf( ((const char**) f->esp)[2], ((size_t*) f->esp)[3]);
+
+				return;	
+			}
+
+			struct file *opened = get_file_by_fd((const int) args[0]);
+
+			if (opened != NULL)
+			{
+				f->eax = file_write (opened, (const void*) args[1], args[2]);
+			}		
+			else 					f->eax=-1;
+
+			
 			return;
 		}break;
 	}
@@ -179,18 +194,7 @@ get_user (const uint8_t *uaddr)
   int result;
   asm ("movl $1f, %0; movzbl %1, %0; 1:"
        : "=&a" (result) : "m" (*uaddr));
-}
-
-/* Writes BYTE to user address UDST.
-   UDST must be below PHYS_BASE.
-   Returns true if successful, false if a segfault occurred. */
-static void
-put_user (uint8_t *udst, uint8_t byte)
-{
-  int error_code;
-  asm ("movl $1f, %0; movb %b2, %1; 1:"
-       : "=&a" (error_code), "=m" (*udst) : "q" (byte));
-}
+}	
 
 static void 
 exec_once()
@@ -271,7 +275,7 @@ delete_open_file_data(struct open_file **opened)
 		dump->before = (*opened)->before;
 	}
 
-	//free((*opened));
+	free((*opened));
 	(*opened) = dump;
 }
 
