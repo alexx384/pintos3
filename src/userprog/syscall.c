@@ -8,7 +8,9 @@
 #include "threads/synch.h"
 #include "threads/malloc.h"
 #include "devices/shutdown.h"
+#include "devices/input.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
 static void get_user (const uint8_t *uaddr);
@@ -17,7 +19,9 @@ static void exec_once(void);
 static void validate_user_pointer(const void *esp);
 /* Work with filesys */
 static int add_file_to_list(struct file *opened_file);
-static int if_file_in_list(const struct file *fd);
+static struct file *get_file_by_fd(const int fd);
+static void close_files(struct file *opened);
+static void delete_open_file_data(struct open_file **opened);
 
 static struct semaphore sema_for_execute={0};
 static int once=1;
@@ -89,9 +93,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 		{
 			if ((int*) args[0] == NULL)	exit(-1);
 			filesys_remove ((const char*) args[0]);
+			return;
 		}break;
 		case SYS_OPEN:
 		{
+			if ((int*) args[0] == NULL)	exit(-1);
+				
 			struct file *opened_file = opened_file = filesys_open ((const char*) args[0]);
 				
 
@@ -101,9 +108,47 @@ syscall_handler (struct intr_frame *f UNUSED)
 				f->eax = add_file_to_list(opened_file);
 
 			return;
-			//else
-			//	add_file_to_list(opened_file, (const char*) args[0]);
-			//return;
+		}break;
+		case SYS_FILESIZE:
+		{
+			if ((int*) args[0] == NULL)	exit(-1);
+
+			struct file *opened = get_file_by_fd((const int) args[0]);
+			f->eax = file_length(opened);
+			return;
+		}break;
+		case SYS_READ:
+		{
+			if ((int*) args[0] == NULL)	exit(-1);
+
+			if (args[0] == 0)
+			{
+				input_init ();
+				
+				input_getc ();
+				return;	
+			}
+
+			validate_user_pointer((const void*) args[1]);
+			get_user((const uint8_t*) args[1]);
+
+			struct file *opened = get_file_by_fd((const int) args[0]);
+
+			if (opened != NULL)
+			{
+				f->eax = file_read(opened, args[1], args[2]);	
+			}else 	f->eax=-1;
+			return;
+		}break;
+		case SYS_CLOSE:
+		{
+			if ((int*) args[0] == NULL)	exit(-1);
+
+			struct file *opened = get_file_by_fd((const int) args[0]);
+
+			if (opened != NULL)		close_files(opened);
+			else 					f->eax=-1;	
+			return;
 		}break;
 		case SYS_WRITE:
 		{
@@ -120,8 +165,7 @@ validate_user_pointer(const void *esp)
 {
 	if (!is_user_vaddr (esp))
 	{
-		printf("Error unknown stack addres!\n");
-		thread_exit ();		
+		exit(-1);		
 	}	
 }
 
@@ -161,10 +205,15 @@ add_file_to_list(struct file *opened_file)
 	struct open_file *open_file = malloc(sizeof(struct open_file));
 
 	open_file->file = opened_file;
-	open_file->next = NULL;
 
-	if (cur->files == NULL)		open_file->before = NULL;	
-	else 						open_file->before = open_file;
+	if (cur->files == NULL)
+	{
+		open_file->next = NULL;
+		open_file->before = NULL;
+	}else{
+		cur->files->next = open_file;
+		open_file->before = cur->files;
+	} 						
 	
 	cur->files = open_file;
 
@@ -174,8 +223,8 @@ add_file_to_list(struct file *opened_file)
 	return open_file->fd;
 }
 
-int
-if_file_in_list(const struct file *fd)
+struct file *
+get_file_by_fd(const int fd)
 {
 	struct thread *cur = thread_current();
 	struct open_file *open_file;
@@ -185,10 +234,45 @@ if_file_in_list(const struct file *fd)
 
 	for (open_file = cur->files; open_file != NULL; open_file = open_file->before)
 	{
-		if (open_file->file == fd)
-		return 1;
+		if (open_file->fd == fd)
+		return open_file->file;
 	}
-	return 0;
+	return 0;	
+}
+
+void
+close_files(struct file *opened)
+{
+	struct thread *cur = thread_current();
+	struct open_file *open_file;
+
+	if (cur->files == NULL)
+		return;
+
+	for (open_file = cur->files; open_file != NULL; open_file = open_file->before)
+	{
+		if (open_file->file == opened)
+		{	
+			file_close (opened);
+			delete_open_file_data(&open_file);
+			if (open_file == NULL){	cur->files = open_file;	return;}
+				
+		}
+	}
+	return;
+}
+
+void
+delete_open_file_data(struct open_file **opened)
+{
+	struct open_file *dump = (*opened)->next;
+	if (dump != NULL)
+	{
+		dump->before = (*opened)->before;
+	}
+
+	//free((*opened));
+	(*opened) = dump;
 }
 
 void 
