@@ -11,6 +11,21 @@
 #include "devices/input.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/directory.h"
+#include "filesys/inode.h"
+
+struct dir_entry 
+  {
+    block_sector_t inode_sector;        /* Sector number of header. */
+    char name[NAME_MAX + 1];            /* Null terminated file name. */
+    bool in_use;                        /* In use or free? */
+  };
+
+struct dir 
+  {
+    struct inode *inode;                /* Backing store. */
+    off_t pos;                          /* Current position. */
+  };  
 
 static void syscall_handler (struct intr_frame *);
 static void get_user (const uint8_t *uaddr);
@@ -166,8 +181,35 @@ syscall_handler (struct intr_frame *f UNUSED)
 				f->eax = file_write (opened, (const void*) args[1], args[2]);
 			}		
 			else 					f->eax=-1;
+			return;	
+		}break;
+		case SYS_RAM_SIZE:
+		{			
+  			f->eax = init_ram_pages * PGSIZE;
+			return;
+		}break;
+		case SYS_RAM_FREE_SIZE:
+		{			
+			uint8_t *free_start = ptov (1024 * 1024);
+  			uint8_t *free_end = ptov (init_ram_pages * PGSIZE);
+  			f->eax = free_end - free_start;
+			return;
+		}break;
+		case SYS_DISK_SPACE:
+		{
+			struct dir_entry e;
+  			size_t ofs;
+  			struct dir *dir = dir_open_root ();
+  			int i = 0;
 
-			
+			for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+    		    ofs += sizeof e) 
+    			if (e.in_use) 
+        		{
+        			printf("%s\n",e.name );
+        			++i;
+      			}
+      		printf("\nTotal count of files %d\n",i );	
 			return;
 		}break;
 	}

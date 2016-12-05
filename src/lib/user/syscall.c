@@ -112,6 +112,24 @@ filesize (int fd)
 }
 
 int
+ram_size (void)
+{
+  return syscall0 (SYS_RAM_SIZE);
+}
+
+int
+ram_free_size (void)
+{
+  return syscall0 (SYS_RAM_FREE_SIZE);
+}
+
+int
+disk_space (void)
+{
+  return syscall0 (SYS_DISK_SPACE);
+}
+
+int
 read (int fd, void *buffer, unsigned size)
 {
   return syscall3 (SYS_READ, fd, buffer, size);

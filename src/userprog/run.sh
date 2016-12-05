@@ -1,4 +1,5 @@
 #!/bin/bash
+cd build
 make tests/userprog/halt.result SIMULATOR=--qemu
 make tests/userprog/exit.result SIMULATOR=--qemu
 make tests/userprog/exec-once.result SIMULATOR=--qemu
