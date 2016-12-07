@@ -6,6 +6,7 @@
 /* Work with threads */
 void add_to_list(int pid);
 int if_elem_in_list(int pid);
+void global_size(int i);
 /* Exit */
 void exit(int value);
 

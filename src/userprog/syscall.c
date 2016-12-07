@@ -13,6 +13,25 @@
 #include "filesys/file.h"
 #include "filesys/directory.h"
 #include "filesys/inode.h"
+#include "devices/block.h"
+
+struct inode_disk
+  {
+    block_sector_t start;               /* First data sector. */
+    off_t length;                       /* File size in bytes. */
+    unsigned magic;                     /* Magic number. */
+    uint32_t unused[125];               /* Not used. */
+  };
+
+struct inode 
+  {
+    struct list_elem elem;              /* Element in inode list. */
+    block_sector_t sector;              /* Sector number of disk location. */
+    int open_cnt;                       /* Number of openers. */
+    bool removed;                       /* True if deleted, false otherwise. */
+    int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+    struct inode_disk data;             /* Inode content. */
+  };  
 
 struct dir_entry 
   {
@@ -37,6 +56,7 @@ static struct file *get_file_by_fd(const int fd);
 static void close_files(struct file *opened);
 static void delete_open_file_data(struct open_file **opened);
 
+static int GLOBAL_size = 0;
 static struct semaphore sema_for_execute={0};
 static int once=1;
 
@@ -200,16 +220,21 @@ syscall_handler (struct intr_frame *f UNUSED)
 			struct dir_entry e;
   			size_t ofs;
   			struct dir *dir = dir_open_root ();
+  			int count_size = 0;
   			int i = 0;
 
 			for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
     		    ofs += sizeof e) 
     			if (e.in_use) 
         		{
-        			printf("%s\n",e.name );
+        			//printf("%s\t%d\n",e.name, inode_length ((const struct inode *) dir->inode) );
+        			printf("%s\t%d\n",e.name, (e.inode_sector - count_size)*512 );
+        			count_size = e.inode_sector;
         			++i;
       			}
-      		printf("\nTotal count of files %d\n",i );	
+      		printf("\nTotal count of files %d\n",i );
+      		printf("Dirty size %d\n", count_size*512 );
+      		printf("Free size %d\n",(GLOBAL_size - count_size)*512 );	
 			return;
 		}break;
 	}
@@ -378,4 +403,10 @@ exit(int value)
 {
 	set_exit_status(value);			
 	thread_exit();	
+}
+
+void
+global_size(int i)
+{
+	GLOBAL_size = i;
 }

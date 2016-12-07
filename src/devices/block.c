@@ -5,6 +5,9 @@
 #include "devices/ide.h"
 #include "threads/malloc.h"
 
+#ifdef USERPROG
+#include "userprog/syscall.h"
+#endif
 /* A block device. */
 struct block
   {
@@ -28,7 +31,6 @@ static struct list all_blocks = LIST_INITIALIZER (all_blocks);
 static struct block *block_by_role[BLOCK_ROLE_CNT];
 
 static struct block *list_elem_to_block (struct list_elem *);
-
 /* Returns a human-readable name for the given block device
    TYPE. */
 const char *
@@ -202,6 +204,10 @@ block_register (const char *name, enum block_type type,
   block->write_cnt = 0;
 
   printf ("%s: %'"PRDSNu" sectors (", block->name, block->size);
+  #ifdef USERPROG
+  global_size(size);
+  #endif
+  //printf("%d - ",(uint64_t) block->size * BLOCK_SECTOR_SIZE);
   print_human_readable_size ((uint64_t) block->size * BLOCK_SECTOR_SIZE);
   printf (")");
   if (extra_info != NULL)
